@@ -162,6 +162,22 @@ defmodule First do
       [] -> result
     end
   end
+
+  def factorize(n) do
+    if n==1 do
+      []
+    else
+      factorize(n, 2)
+    end
+  end
+
+  defp factorize(n, i) do
+    if isPrime(i) and rem(n, i) == 0 do
+      [i | factorize(round(n / i), i)]
+    else
+      factorize(n, i + 1)
+    end
+  end
 end
 
 #First.hello
@@ -187,3 +203,4 @@ end
 #IO.inspect(First.groupAnagrams(["eat", "tea", "tan", "ate", "nat", "bat"]))
 #IO.inspect(First.arabic_to_roman(13))
 #IO.inspect(First.longest_common_prefix(["flower", "flow", "flight"]))
+#IO.inspect(First.factorize(42))

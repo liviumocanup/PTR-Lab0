@@ -13,6 +13,6 @@ defmodule Lab1 do
 
   """
   def hello do
-    :world
+    "Hello PTR!"
   end
 end
