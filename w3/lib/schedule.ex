@@ -17,7 +17,7 @@ defmodule Schedule do
   end
 
   defp attempt_task(task) do
-    if :rand.uniform() < 0.5 do
+    if :rand.uniform(10) < 5 do
       exit(:normal)
     else
       exit(task)
