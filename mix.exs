@@ -1,9 +1,9 @@
-defmodule Lab1.MixProject do
+defmodule W5.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :lab1,
+      app: :w5,
       version: "0.1.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
@@ -23,6 +23,10 @@ defmodule Lab1.MixProject do
     [
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      {:httpoison, "~> 2.0"},
+      {:floki, "~> 0.34.0"},
+      {:jason, "~> 1.4"},
+      {:plug_cowboy, "~> 2.0"}
     ]
   end
 end
