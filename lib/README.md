@@ -1075,20 +1075,273 @@ The `Dude` module is another `GenServer` process that responds to calls to the `
 **Task 1** -- Quotes Web Scraper
 
 ```elixir
+defmodule Quotes do
+  @url "https://quotes.toscrape.com/"
 
+  defp get_request() do
+    HTTPoison.get!(@url)
+  end
+
+  def init do
+    response = get_request()
+
+    print_response(response)
+
+    quotes = extract_quotes(response.body)
+
+    write_to_file(quotes)
+  end
+
+  defp print_response(response) do
+    IO.puts("Response status_code : #{response.status_code}")
+    IO.inspect(response.headers, label: "Response headers")
+    IO.puts("Response body : #{response.body}")
+  end
+
+  defp extract_quotes(body) do
+    {:ok, html} = Floki.parse_document(body)
+    quotes = Floki.find(html, ".quote")
+    Enum.map(quotes, fn quote ->
+      author = extract_author(quote)
+      text = extract_text(quote)
+      tags = extract_tags(quote)
+      IO.inspect(%{author: author, text: text, tags: tags})
+    end)
+  end
+
+  defp write_to_file(quotes) do
+    File.write!("quotes.json", Jason.encode!(quotes))
+  end
+
+  defp extract_author(quote) do
+    Floki.find(quote, ".author") |> hd() |> Floki.text()
+  end
+
+  defp extract_text(quote) do
+    Floki.find(quote, ".text") |> hd() |> Floki.text()
+  end
+
+  defp extract_tags(quote) do
+    Floki.find(quote, ".tag") |> Enum.map(&Floki.text/1)
+  end
+end
 ```
+The `Quotes` module uses `HTTPoison` to send a get request to "https://quotes.toscrape.com/". In function `print_response` I print out the HTTP response status code, response headers and response body. In function `extract_quotes`, using Floki I find the quotes by searching `.quote` and by iterating over every quote, finding the author, text and tags using `Floki.find() |> hd() |> Floki.text()` to extract each separately. Writing to file is done with `Jason.encode()` in `quotes.json`. 
 
 **Task 2** -- Star Wars API
 
 ```elixir
+defmodule StarWarsApi do
+  use Application
+  require Logger
 
+  def start(_type, _args) do
+    children = [
+      {Plug.Cowboy, scheme: :http, plug: StarWarsApi.Router, options: [port: 8080]},
+      {StarWarsApi.Repository, []}
+    ]
+    opts = [strategy: :one_for_one, name: StarWarsApi.Supervisor]
+
+    Logger.info("Starting application...")
+
+    Supervisor.start_link(children, opts)
+  end
+end
+
+defmodule StarWarsApi.Router do
+  use Plug.Router
+
+  plug Plug.Parsers,
+       parsers: [:urlencoded, :json],
+       pass: ["*/*"],
+       json_decoder: Jason
+
+  plug :match
+  plug :dispatch
+
+  get "/movies" do
+    movies = StarWarsApi.Repository.get_all_movies()
+    send_resp(conn, 200, Jason.encode!(movies))
+  end
+
+  get "/movies/:id" do
+    id = conn.params["id"] |> String.to_integer()
+    movie = StarWarsApi.Repository.get_movie(id)
+    send_resp(conn, 200, Jason.encode!(movie))
+  end
+
+  post "/movies" do
+    movie = conn.body_params
+    new_movie = StarWarsApi.Repository.create_movie(movie)
+    send_resp(conn, 201, Jason.encode!(new_movie))
+  end
+
+  put "/movies/:id" do
+    id = conn.params["id"] |> String.to_integer()
+    movie = conn.body_params
+    new_movie = StarWarsApi.Repository.update_movie(id, movie)
+    send_resp(conn, 200, Jason.encode!(new_movie))
+  end
+
+  patch "/movies/:id" do
+    id = conn.params["id"] |> String.to_integer()
+    movie = conn.body_params
+    new_movie = StarWarsApi.Repository.update_movie(id, movie)
+    send_resp(conn, 200, Jason.encode!(new_movie))
+  end
+
+  delete "/movies/:id" do
+    id = conn.params["id"] |> String.to_integer()
+    StarWarsApi.Repository.delete_movie(id)
+    send_resp(conn, 204, "")
+  end
+
+  match _ do
+    send_resp(conn, 404, "Path doesn't exist.")
+  end
+end
+
+defmodule StarWarsApi.Repository do
+  use GenServer
+
+  def start_link(_) do
+    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+  end
+
+  def init(_) do
+    :ets.new(:movies_table, [:set, :public, :named_table])
+    :ok = load_movies_into_table(:movies_table)
+    {:ok, :movies_table}
+  end
+
+  defp load_movies_into_table(table) do
+    movies = [
+      %{
+        id: 1,
+        title: "Star Wars: Episode IV - A New Hope",
+        director: "George Lucas",
+        release_year: 1977
+      },
+      %{
+        id: 2,
+        title: "Star Wars: Episode V - The Empire Strikes Back",
+        director: "Irvin Kershner",
+        release_year: 1980
+      },
+      %{
+        id: 3,
+        title: "Star Wars: Episode VI - Return of the Jedi",
+        director: "Richard Marquand",
+        release_year: 1983
+      },
+      %{
+        id: 4,
+        title: "Star Wars: Episode I - The Phantom Menace",
+        director: "George Lucas",
+        release_year: 1999
+      },
+      %{
+        id: 5,
+        title: "Star Wars: Episode II - Attack of the Clones",
+        director: "George Lucas",
+        release_year: 2002
+      },
+      %{
+        id: 6,
+        title: "Star Wars: Episode III - Revenge of the Sith",
+        director: "George Lucas",
+        release_year: 2005
+      },
+      %{
+        id: 7,
+        title: "Star Wars: Episode VII - The Force Awakens",
+        director: "J.J. Abrams",
+        release_year: 2015
+      },
+      %{
+        id: 8,
+        title: "Star Wars: Episode VIII - The Last Jedi",
+        director: "Rian Johnson",
+        release_year: 2017
+      },
+      %{
+        id: 9,
+        title: "Star Wars: Episode IX - The Rise of Skywalker",
+        director: "J.J. Abrams",
+        release_year: 2019
+      },
+      %{
+        id: 10,
+        title: "Star Wars: Episode III - Revenge of the Sith",
+        director: "George Lucas",
+        release_year: 2005
+      }
+    ]
+
+    Enum.each(movies, fn movie ->
+      :ets.insert(table, {movie[:id], movie})
+    end)
+  end
+
+  def handle_call(:get_all_movies, _from, table) do
+    movies = Enum.map(:ets.tab2list(table), fn {key, movie} -> Map.put(movie, :id, key) end)
+    {:reply, movies, table}
+  end
+
+  def handle_call({:get_movie, id}, _from, table) do
+    movies = :ets.lookup(table, id)
+    if length(movies) == 0 do
+      {:reply, nil, table}
+    else
+      {key, movie} = List.first(movies)
+      {:reply, %{movie | id: key}, table}
+    end
+  end
+
+  def handle_call({:create_movie, movie}, _from, table) do
+    id = :ets.info(table, :size) + 1
+    Map.put(movie, :id, id)
+    :ets.insert(table, {id, movie})
+    {:reply, :ok, table}
+  end
+
+  def handle_call({:update_movie, id, movie}, _from, table) do
+    :ets.insert(table, {id, movie})
+    {:reply, :ok, table}
+  end
+
+  def handle_call({:delete_movie, id}, _from, table) do
+    :ets.delete(table, id)
+    {:reply, :ok, table}
+  end
+
+  def get_all_movies do
+    GenServer.call(__MODULE__, :get_all_movies)
+  end
+
+  def get_movie(id) do
+    GenServer.call(__MODULE__, {:get_movie, id})
+  end
+
+  def create_movie(movie) do
+    GenServer.call(__MODULE__, {:create_movie, movie})
+  end
+
+  def update_movie(id, movie) do
+    GenServer.call(__MODULE__, {:update_movie, id, movie})
+  end
+
+  def delete_movie(id) do
+    GenServer.call(__MODULE__, {:delete_movie, id})
+  end
+end
 ```
-
+`StarWarsApi` is an API that allows to get, create, update, and delete movies from an ETS table database. It is built using `Plug and Cowboy` which is defined in the `StarWarsApi.Router` module while database is defined in the `StarWarsApi.Repository` module. The database is started as a GenServer and is registered under the name StarWarsApi.Repository. The API uses the GenServer to access the database. The API is started as an Application and is registered under the name StarWarsApi. The API is started using the command `StarWarsApi.start(:normal, [])`.
 
 ## Conclusion
 Overall, our laboratory work in functional programming with Elixir has been a challenging but rewarding experience. We started by learning the basics of the language, such as variables, functions, and control structures, and we gradually progressed to more advanced concepts, such as processes, message passing, and concurrency.
 
-Throughout our work, we explored the actor model and its implementation in Elixir, using GenServer and Supervisor to create fault-tolerant and scalable systems. We also learned how to build complex applications with Elixir, using its built-in tools and libraries, such as Mix, Application, and HTTPoison.
+Throughout our work, we explored the actor model and its implementation in Elixir, using GenServer and Supervisor to create fault-tolerant and scalable systems. We also learned how to build complex applications with Elixir, using its built-in tools and libraries, such as Mix, HTTPoison, Floki, Poison, Application and Plug as well as ETS.
 
 ## Bibliography
 
